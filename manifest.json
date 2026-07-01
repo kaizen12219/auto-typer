@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Typer",
+  "version": "1.0.0",
+  "description": "Types clipboard text into the focused editable field with a keyboard shortcut.",
+  "minimum_chrome_version": "109",
+  "permissions": [
+    "activeTab",
+    "clipboardRead",
+    "offscreen",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Auto Typer: type clipboard into the focused field"
+  },
+  "commands": {
+    "type-clipboard": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Type clipboard text into the currently focused input"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}
