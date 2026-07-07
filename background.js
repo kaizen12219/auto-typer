@@ -58,7 +58,14 @@ async function typeClipboardIntoFocusedField() {
 
   try {
     if (!await isEnabled()) {
-      await flashBadge(tab.id, "OFF", "#777777");
+      await ensureContentScript(tab.id);
+
+      const dispatched = await sendToFocusedFrame(tab.id, {
+        source: MESSAGE_SOURCE,
+        type: "DISPATCH_PASTE_SHORTCUT"
+      });
+
+      await flashBadge(tab.id, dispatched?.ok ? "V" : "NO", "#777777");
       return;
     }
 
