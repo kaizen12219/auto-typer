@@ -60,33 +60,6 @@
       return false;
     }
 
-    if (message.type === "DISPATCH_PASTE_SHORTCUT") {
-      const target = getKeyboardEventTarget();
-
-      if (!document.hasFocus() || !target || isFrameElement(target)) {
-        return false;
-      }
-
-      dispatchPasteShortcut(target);
-      sendResponse({ ok: true });
-      return true;
-    }
-
-    if (message.type === "PREPARE_TYPING") {
-      const job = prepareTypingJob();
-
-      if (!job) {
-        return false;
-      }
-
-      pendingJobs.set(job.id, job);
-      sendResponse({
-        ok: true,
-        jobId: job.id
-      });
-      return true;
-    }
-
     if (message.type === "START_TYPING") {
       const job = pendingJobs.get(message.jobId);
 
@@ -131,7 +104,6 @@
 
   function shouldHandlePasteShortcut(event) {
     if (
-      event.__autoTyperSyntheticPaste ||
       !enabledStateLoaded ||
       !autoTyperEnabled ||
       event.defaultPrevented
@@ -147,72 +119,6 @@
       !event.shiftKey &&
       event.key.toLowerCase() === "v"
     );
-  }
-
-  function dispatchPasteShortcut(target) {
-    const useMetaKey = isMacPlatform();
-
-    dispatchSyntheticKeyboardEvent(target, "keydown", {
-      key: useMetaKey ? "Meta" : "Control",
-      code: useMetaKey ? "MetaLeft" : "ControlLeft",
-      keyCode: useMetaKey ? 91 : 17,
-      metaKey: useMetaKey,
-      ctrlKey: !useMetaKey
-    });
-
-    dispatchSyntheticKeyboardEvent(target, "keydown", {
-      key: "v",
-      code: "KeyV",
-      keyCode: 86,
-      metaKey: useMetaKey,
-      ctrlKey: !useMetaKey
-    });
-
-    dispatchSyntheticKeyboardEvent(target, "keyup", {
-      key: "v",
-      code: "KeyV",
-      keyCode: 86,
-      metaKey: useMetaKey,
-      ctrlKey: !useMetaKey
-    });
-
-    dispatchSyntheticKeyboardEvent(target, "keyup", {
-      key: useMetaKey ? "Meta" : "Control",
-      code: useMetaKey ? "MetaLeft" : "ControlLeft",
-      keyCode: useMetaKey ? 91 : 17
-    });
-  }
-
-  function getKeyboardEventTarget() {
-    return getDeepActiveElement(document) || document.body || document.documentElement;
-  }
-
-  function isFrameElement(element) {
-    return element instanceof HTMLIFrameElement || element instanceof HTMLFrameElement;
-  }
-
-  function dispatchSyntheticKeyboardEvent(target, type, options) {
-    const event = new KeyboardEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-      ctrlKey: Boolean(options.ctrlKey),
-      metaKey: Boolean(options.metaKey),
-      key: options.key,
-      code: options.code,
-      keyCode: options.keyCode,
-      which: options.keyCode
-    });
-
-    Object.defineProperty(event, "__autoTyperSyntheticPaste", {
-      value: true
-    });
-
-    target.dispatchEvent(event);
-  }
-
-  function isMacPlatform() {
-    return navigator.platform.toLowerCase().includes("mac");
   }
 
   async function requestClipboardTyping(jobId) {

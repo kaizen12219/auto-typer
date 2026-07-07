@@ -1,5 +1,4 @@
 const MESSAGE_SOURCE = "auto-typer";
-const TYPE_COMMAND = "type-clipboard";
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const DEFAULT_ENABLED = true;
 const ACTION_ICON_SIZES = [16, 24, 32, 48];
@@ -14,12 +13,6 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(() => {
   void syncActionState();
-});
-
-chrome.commands.onCommand.addListener((command) => {
-  if (command === TYPE_COMMAND) {
-    void typeClipboardIntoFocusedField();
-  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -50,53 +43,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
-async function typeClipboardIntoFocusedField() {
-  const tab = await getActiveTab();
-  if (!tab?.id) {
-    return;
-  }
-
-  try {
-    if (!await isEnabled()) {
-      await ensureContentScript(tab.id);
-
-      const dispatched = await sendToFocusedFrame(tab.id, {
-        source: MESSAGE_SOURCE,
-        type: "DISPATCH_PASTE_SHORTCUT"
-      });
-
-      await flashBadge(tab.id, dispatched?.ok ? "V" : "NO", "#777777");
-      return;
-    }
-
-    await ensureContentScript(tab.id);
-
-    const prepared = await sendToFocusedFrame(tab.id, {
-      source: MESSAGE_SOURCE,
-      type: "PREPARE_TYPING"
-    });
-
-    if (!prepared?.ok || !prepared.jobId) {
-      await flashBadge(tab.id, "NO", "#777777");
-      return;
-    }
-
-    const clipboardText = await readClipboardText();
-
-    await sendToFocusedFrame(tab.id, {
-      source: MESSAGE_SOURCE,
-      type: "START_TYPING",
-      jobId: prepared.jobId,
-      text: clipboardText
-    });
-
-    await flashBadge(tab.id, "GO", "#238636");
-  } catch (error) {
-    console.warn("Auto Typer failed:", error);
-    await flashBadge(tab.id, "ERR", "#d1242f");
-  }
-}
-
 async function typeClipboardIntoPreparedJob(sender, jobId) {
   const tabId = sender.tab?.id;
   const frameId = sender.frameId;
@@ -125,33 +71,6 @@ async function typeClipboardIntoPreparedJob(sender, jobId) {
   });
 
   await flashBadge(tabId, "GO", "#238636");
-}
-
-async function getActiveTab() {
-  const [tab] = await chrome.tabs.query({
-    active: true,
-    currentWindow: true
-  });
-
-  return tab;
-}
-
-async function ensureContentScript(tabId) {
-  try {
-    await chrome.scripting.executeScript({
-      target: {
-        tabId,
-        allFrames: true
-      },
-      files: ["content.js"]
-    });
-  } catch (error) {
-    console.debug("Auto Typer could not inject into this page:", error);
-  }
-}
-
-async function sendToFocusedFrame(tabId, message) {
-  return chrome.tabs.sendMessage(tabId, message);
 }
 
 async function sendToFrame(tabId, frameId, message) {
@@ -269,7 +188,7 @@ async function ensureOffscreenDocument() {
   creatingOffscreenDocument = chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT_PATH,
     reasons: ["CLIPBOARD"],
-    justification: "Read clipboard text when the user presses the Auto Typer shortcut."
+    justification: "Read clipboard text when the user presses paste with Auto Typer enabled."
   });
 
   try {
