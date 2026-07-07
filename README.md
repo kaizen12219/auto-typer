@@ -17,7 +17,7 @@ Auto Typer types the current clipboard text into the editable field that is focu
 
 You can also press `Ctrl+Shift+Y` on Windows/Linux or `Command+Shift+Y` on macOS. You can change that fallback shortcut at `chrome://extensions/shortcuts`.
 
-Click the Auto Typer extension icon to enable or disable auto-typing. When disabled, paste behaves normally, the fallback shortcut does nothing, and any in-progress typing stops.
+Click the Auto Typer extension icon to enable or disable auto-typing. The toolbar icon turns green when enabled and gray with a slash when disabled. When disabled, paste behaves normally, the fallback shortcut does nothing, and any in-progress typing stops.
 
 The extension stores the original target and caret position before typing starts. If you focus another field while typing is running, the running job continues writing into the original target. Pressing the hotkey again starts another typing job for whatever field is focused at that moment.
 

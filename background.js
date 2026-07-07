@@ -2,8 +2,11 @@ const MESSAGE_SOURCE = "auto-typer";
 const TYPE_COMMAND = "type-clipboard";
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const DEFAULT_ENABLED = true;
+const ACTION_ICON_SIZES = [16, 24, 32, 48];
 
 let creatingOffscreenDocument;
+
+void syncActionState();
 
 chrome.runtime.onInstalled.addListener(() => {
   void syncActionState();
@@ -159,6 +162,10 @@ async function isEnabled() {
 async function syncActionState() {
   const enabled = await isEnabled();
 
+  await chrome.action.setIcon({
+    imageData: createActionIconSet(enabled)
+  });
+
   await chrome.action.setTitle({
     title: enabled ? "Auto Typer is enabled" : "Auto Typer is disabled"
   });
@@ -170,6 +177,59 @@ async function syncActionState() {
 
   await chrome.action.setBadgeBackgroundColor({ color: "#777777" });
   await chrome.action.setBadgeText({ text: "OFF" });
+}
+
+function createActionIconSet(enabled) {
+  return Object.fromEntries(
+    ACTION_ICON_SIZES.map((size) => [size, createActionIcon(size, enabled)])
+  );
+}
+
+function createActionIcon(size, enabled) {
+  const canvas = new OffscreenCanvas(size, size);
+  const context = canvas.getContext("2d");
+  const scale = size / 48;
+
+  context.clearRect(0, 0, size, size);
+  drawRoundedRect(context, 2 * scale, 2 * scale, 44 * scale, 44 * scale, 10 * scale);
+  context.fillStyle = enabled ? "#238636" : "#6e7781";
+  context.fill();
+
+  context.fillStyle = "#ffffff";
+  context.font = `700 ${22 * scale}px Arial, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("A", 18 * scale, 25 * scale);
+
+  context.fillRect(29 * scale, 14 * scale, 4 * scale, 22 * scale);
+  context.fillRect(27 * scale, 14 * scale, 8 * scale, 3 * scale);
+  context.fillRect(27 * scale, 33 * scale, 8 * scale, 3 * scale);
+
+  if (!enabled) {
+    context.strokeStyle = "#ffffff";
+    context.lineWidth = 6 * scale;
+    context.lineCap = "round";
+    context.beginPath();
+    context.moveTo(12 * scale, 36 * scale);
+    context.lineTo(36 * scale, 12 * scale);
+    context.stroke();
+  }
+
+  return context.getImageData(0, 0, size, size);
+}
+
+function drawRoundedRect(context, x, y, width, height, radius) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
 }
 
 async function readClipboardText() {
