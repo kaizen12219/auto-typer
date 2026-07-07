@@ -7,6 +7,7 @@
 
   const MESSAGE_SOURCE = "auto-typer";
   const TYPE_DELAY_MS = 20;
+  const DEFAULT_ENABLED = true;
   const TEXT_INPUT_TYPES = new Set([
     "",
     "email",
@@ -20,6 +21,39 @@
 
   const pendingJobs = new Map();
   const activeJobs = new Map();
+  let autoTyperEnabled = false;
+  let enabledStateLoaded = false;
+
+  void hydrateEnabledState();
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "sync" && changes.enabled) {
+      autoTyperEnabled = Boolean(changes.enabled.newValue);
+      enabledStateLoaded = true;
+
+      if (!autoTyperEnabled) {
+        cancelAllJobs();
+      }
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!shouldHandlePasteShortcut(event)) {
+      return;
+    }
+
+    const job = prepareTypingJob();
+
+    if (!job) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    pendingJobs.set(job.id, job);
+
+    void requestClipboardTyping(job.id);
+  }, true);
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.source !== MESSAGE_SOURCE) {
@@ -73,6 +107,71 @@
 
     return false;
   });
+
+  async function hydrateEnabledState() {
+    const settings = await chrome.storage.sync.get({
+      enabled: DEFAULT_ENABLED
+    });
+
+    autoTyperEnabled = Boolean(settings.enabled);
+    enabledStateLoaded = true;
+  }
+
+  function shouldHandlePasteShortcut(event) {
+    if (!enabledStateLoaded || !autoTyperEnabled || event.defaultPrevented) {
+      return false;
+    }
+
+    const isPrimaryModifier = event.ctrlKey || event.metaKey;
+
+    return Boolean(
+      isPrimaryModifier &&
+      !event.altKey &&
+      !event.shiftKey &&
+      event.key.toLowerCase() === "v"
+    );
+  }
+
+  async function requestClipboardTyping(jobId) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        source: MESSAGE_SOURCE,
+        type: "TYPE_PREPARED_CLIPBOARD",
+        jobId
+      });
+
+      if (!response?.ok) {
+        cancelJob(jobId);
+      }
+    } catch (error) {
+      console.warn("Auto Typer shortcut failed:", error);
+      cancelJob(jobId);
+    }
+  }
+
+  function cancelJob(jobId) {
+    const job = pendingJobs.get(jobId) || activeJobs.get(jobId);
+
+    if (job) {
+      job.cancelled = true;
+    }
+
+    pendingJobs.delete(jobId);
+    activeJobs.delete(jobId);
+  }
+
+  function cancelAllJobs() {
+    for (const job of pendingJobs.values()) {
+      job.cancelled = true;
+    }
+
+    for (const job of activeJobs.values()) {
+      job.cancelled = true;
+    }
+
+    pendingJobs.clear();
+    activeJobs.clear();
+  }
 
   function prepareTypingJob() {
     if (!document.hasFocus()) {

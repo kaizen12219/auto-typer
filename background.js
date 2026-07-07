@@ -1,8 +1,17 @@
 const MESSAGE_SOURCE = "auto-typer";
 const TYPE_COMMAND = "type-clipboard";
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
+const DEFAULT_ENABLED = true;
 
 let creatingOffscreenDocument;
+
+chrome.runtime.onInstalled.addListener(() => {
+  void syncActionState();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void syncActionState();
+});
 
 chrome.commands.onCommand.addListener((command) => {
   if (command === TYPE_COMMAND) {
@@ -10,8 +19,32 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-chrome.action.onClicked.addListener(() => {
-  void typeClipboardIntoFocusedField();
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.source !== MESSAGE_SOURCE) {
+    return false;
+  }
+
+  if (message.type === "TYPE_PREPARED_CLIPBOARD") {
+    void typeClipboardIntoPreparedJob(sender, message.jobId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => {
+        console.warn("Auto Typer failed:", error);
+        sendResponse({
+          ok: false,
+          error: error?.message || "Auto Typer failed."
+        });
+      });
+
+    return true;
+  }
+
+  return false;
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "sync" && changes.enabled) {
+    void syncActionState();
+  }
 });
 
 async function typeClipboardIntoFocusedField() {
@@ -21,6 +54,11 @@ async function typeClipboardIntoFocusedField() {
   }
 
   try {
+    if (!await isEnabled()) {
+      await flashBadge(tab.id, "OFF", "#777777");
+      return;
+    }
+
     await ensureContentScript(tab.id);
 
     const prepared = await sendToFocusedFrame(tab.id, {
@@ -49,6 +87,36 @@ async function typeClipboardIntoFocusedField() {
   }
 }
 
+async function typeClipboardIntoPreparedJob(sender, jobId) {
+  const tabId = sender.tab?.id;
+  const frameId = sender.frameId;
+
+  if (!tabId || typeof frameId !== "number" || !jobId) {
+    throw new Error("Unable to find the originating tab and frame.");
+  }
+
+  if (!await isEnabled()) {
+    await sendToFrame(tabId, frameId, {
+      source: MESSAGE_SOURCE,
+      type: "CANCEL_TYPING",
+      jobId
+    });
+    await flashBadge(tabId, "OFF", "#777777");
+    return;
+  }
+
+  const clipboardText = await readClipboardText();
+
+  await sendToFrame(tabId, frameId, {
+    source: MESSAGE_SOURCE,
+    type: "START_TYPING",
+    jobId,
+    text: clipboardText
+  });
+
+  await flashBadge(tabId, "GO", "#238636");
+}
+
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({
     active: true,
@@ -74,6 +142,34 @@ async function ensureContentScript(tabId) {
 
 async function sendToFocusedFrame(tabId, message) {
   return chrome.tabs.sendMessage(tabId, message);
+}
+
+async function sendToFrame(tabId, frameId, message) {
+  return chrome.tabs.sendMessage(tabId, message, { frameId });
+}
+
+async function isEnabled() {
+  const settings = await chrome.storage.sync.get({
+    enabled: DEFAULT_ENABLED
+  });
+
+  return Boolean(settings.enabled);
+}
+
+async function syncActionState() {
+  const enabled = await isEnabled();
+
+  await chrome.action.setTitle({
+    title: enabled ? "Auto Typer is enabled" : "Auto Typer is disabled"
+  });
+
+  if (enabled) {
+    await chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+
+  await chrome.action.setBadgeBackgroundColor({ color: "#777777" });
+  await chrome.action.setBadgeText({ text: "OFF" });
 }
 
 async function readClipboardText() {
